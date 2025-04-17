@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>APA形式 著者変換ツール</title>
+<style>
+body {
+font-family: sans-serif;
+padding: 20px;
+max-width: 800px;
+margin: auto;
+}
+textarea {
+width: 100%;
+height: 100px;
+margin-bottom: 10px;
+}
+button {
+margin-top: 5px;
+margin-right: 5px;
+}
+#apaOutput {
+margin-top: 15px;
+padding: 10px;
+background: #f4f4f4;
+white-space: pre-wrap;
+border: 1px solid #ccc;
+}
+.history-entry {
+border-bottom: 1px solid #ddd;
+padding: 8px 0;
+}
+.copy-btn, .delete-btn {
+margin-right: 5px;
+}
+.history-title {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin-top: 30px;
+}
+</style>
+</head>
+<body>
+
+<h2>APA形式 著者変換ツール（履歴付き）</h2>
+<p><a href="更新履歴.html" target="_brank">修正履歴を見る</a></p>
+
+<p>1人目はAPA形式（姓, 名）、2人目以降は「名 姓」。<br>最後の著者は <code>and</code> で接続され、変換履歴は最大20件まで保存されます。</p>
+
+<textarea id="inputText" placeholder="APA形式の文献をここに貼り付けてください"></textarea><br>
+
+
+<button onclick="reconstructAPA()">APA形式に再構成</button>
+<button onclick="clearInput()">削除</button>
+
+<div id="apaOutput"></div>
+<button onclick="copyAPA()">コピー</button>
+<p><a href="https://forms.office.com/Pages/DesignPageV2.aspx?origin=NeoPortalPage&subpage=design&id=_6DkBnJJi0qvMEVxNh0TRF-KPbnfhIRCng6WfkEN-OxUME9WUEUxWUU2VE1HWldUMjM4VE8xUzczTC4u">エラー報告（Forms）</a></p>
+
+<div class="history-title">
+<h3>変換履歴</h3>
+<button onclick="clearAllHistory()">すべて削除</button>
+</div>
+<div id="historyList"></div>
+
+<script>
+function reconstructAPA() {
+//入力欄のテキストを取得して、出力欄を空にする
+const input = document.getElementById("inputText").value;
+const output = document.getElementById("apaOutput");
+output.textContent = "";
+
+//西暦の正規表現を探す
+const yearMatch = input.match(/\(\d{4}\)/);
+if (!yearMatch) {
+output.textContent = "年情報が見つかりませんでした。";
+return;
+}
+
+//見つかった年の位置を取得
+const yearIndex = input.indexOf(yearMatch[0]);
+const beforeYear = input.substring(0, yearIndex).trim();
+const afterYear = input.substring(yearIndex).trim();
+
+//著者情報と論文情報を分離、＆を削除
+const cleaned = beforeYear.replace(/& /g, "").trim();
+const parts = cleaned.split(",").map(p => p.trim()).filter(p => p !== "");
+
+//著者名を入れる配列
+let authors = [];
+
+//姓名のペアごとに著者を整理する
+for (let i = 0; i < parts.length - 1; i += 2) {
+const lastName = parts[i];
+const initials = parts[i + 1];
+
+let formatted;
+if (i === 0) {
+formatted = `${lastName}, ${initials}`; // APA形式
+} else {
+formatted = `${initials} ${lastName}`; // 名 姓
+}
+
+authors.push(formatted);
+}
+
+let authorStr = "";
+
+if (authors.length === 1) {
+authorStr = authors[0];
+} else if (authors.length === 2) {
+authorStr = authors[0] + " and " + authors[1];
+} else {
+const last = authors.pop();
+authorStr = authors.join(", ") + " and " + last;
+}
+
+const fullAPA = authorStr + " " + afterYear;
+output.textContent = fullAPA;
+
+saveToHistory(fullAPA);
+
+}
+
+function copyAPA() {
+const text = document.getElementById("apaOutput").textContent;
+if (!text) return;
+
+navigator.clipboard.writeText(text).then(() => {
+alert("コピーしました！");
+clearInput();
+}).catch(err => {
+alert("コピーに失敗しました: " + err);
+});
+}
+
+function clearInput() {
+document.getElementById("inputText").value = "";
+}
+
+// ---------- 履歴管理 ----------
+function saveToHistory(entry) {
+let history = JSON.parse(localStorage.getItem("apaHistory") || "[]");
+
+if (!history.includes(entry)) {
+history.unshift(entry); // 新しいものを先頭に
+
+// 最大20件に制限
+if (history.length > 20) {
+history = history.slice(0, 20);
+}
+
+localStorage.setItem("apaHistory", JSON.stringify(history));
+renderHistory();
+}
+}
+
+function deleteHistory(index) {
+const history = JSON.parse(localStorage.getItem("apaHistory") || "[]");
+history.splice(index, 1);
+localStorage.setItem("apaHistory", JSON.stringify(history));
+renderHistory();
+}
+
+function clearAllHistory() {
+if (confirm("すべての履歴を削除しますか？")) {
+localStorage.removeItem("apaHistory");
+renderHistory();
+}
+}
+
+function renderHistory() {
+const history = JSON.parse(localStorage.getItem("apaHistory") || "[]");
+const container = document.getElementById("historyList");
+container.innerHTML = "";
+
+history.forEach((item, index) => {
+const entryDiv = document.createElement("div");
+entryDiv.className = "history-entry";
+
+const textPara = document.createElement("p");
+textPara.textContent = item;
+
+const copyBtn = document.createElement("button");
+copyBtn.textContent = "コピー";
+copyBtn.className = "copy-btn";
+copyBtn.onclick = () => {
+navigator.clipboard.writeText(item).then(() => {
+alert("履歴をコピーしました！");
+});
+};
+
+const deleteBtn = document.createElement("button");
+deleteBtn.textContent = "削除";
+deleteBtn.className = "delete-btn";
+deleteBtn.onclick = () => {
+deleteHistory(index);
+};
+
+entryDiv.appendChild(textPara);
+entryDiv.appendChild(copyBtn);
+entryDiv.appendChild(deleteBtn);
+container.appendChild(entryDiv);
+});
+}
+
+// 初期表示
+renderHistory();
+</script>
+
+</body>
+</html>
