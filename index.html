@@ -63,11 +63,11 @@
 function reconstructAPA() {
   const input = document.getElementById("inputText").value.trim();
   const output = document.getElementById("apaOutput");
-  output.innerHTML = "";
+  output.textContent = "";
 
   const yearMatch = input.match(/\(\d{4}\)/);
   if (!yearMatch) {
-    output.innerHTML = "年情報が見つかりませんでした。";
+    output.textContent = "年情報が見つかりませんでした。";
     return;
   }
 
@@ -110,9 +110,9 @@ function reconstructAPA() {
 
   let after = afterYear
     .replace(/^\.?\s*/, "")
-    .replace(/\((\d+)\):\s*([\d\-–]+)/, "$1: $2")
-    .replace(/,\s*(\d+)\(\d+\),\s*(e\d+)/i, " $1: $2")
-    .replace(/,\s*(\d+),\s*(\d+[-–]?\d*)/i, " $1: $2")
+    .replace(/\((\d+)\)/, "$1") // ← 巻号の (号) を削除
+    .replace(/,\s*(\d+)\s*\((\d+)\),\s*([\deE\-–]+)/, " $1: $3") // 通常の巻(号),ページ → 巻: ページ
+    .replace(/,\s*(\d+),\s*([\deE\-–]+)/, " $1: $2") // 巻,ページ → 巻: ページ
     .replace(/\s+/g, " ")
     .trim();
 
