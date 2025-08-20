@@ -1,23 +1,73 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>APAテスト</title>
+  <title>APA形式 著者変換ツール</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: auto;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+      margin-bottom: 10px;
+    }
+    button {
+      margin-top: 5px;
+      margin-right: 5px;
+    }
+    #apaOutput {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f4f4f4;
+      white-space: pre-wrap;
+      border: 1px solid #ccc;
+    }
+    .history-entry {
+      border-bottom: 1px solid #ddd;
+      padding: 8px 0;
+    }
+    .copy-btn, .delete-btn {
+      margin-right: 5px;
+    }
+    .history-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 30px;
+    }
+  </style>
 </head>
 <body>
 
-<textarea id="inputText" style="width:100%;height:100px;">Svikle, M. Ya. (1976) Control of the Colorado beetle. Zashchita Rastenii (6): 10-11</textarea><br>
-<button onclick="convert()">変換</button>
-<pre id="result" style="padding:10px; border:1px solid #ccc;"></pre>
+<h2>APA形式 著者変換ツール（履歴付き・完全対応版）</h2>
+
+<textarea id="inputText" placeholder="APA形式の文献をここに貼り付けてください"></textarea><br>
+
+<button onclick="reconstructAPA()">APA形式に再構成</button>
+<button onclick="clearInput()">削除</button>
+
+<div id="apaOutput"></div>
+<button onclick="copyAPA()">コピー</button>
+
+<div class="history-title">
+  <h3>変換履歴</h3>
+  <button onclick="clearAllHistory()">すべて削除</button>
+</div>
+<div id="historyList"></div>
 
 <script>
-function convert() {
+function reconstructAPA() {
   const input = document.getElementById("inputText").value.trim();
-  const output = document.getElementById("result");
+  const output = document.getElementById("apaOutput");
+  output.textContent = "";
 
   const yearMatch = input.match(/\(\d{4}\)/);
   if (!yearMatch) {
-    output.textContent = "年が見つかりません";
+    output.textContent = "年情報が見つかりませんでした。";
     return;
   }
 
@@ -25,22 +75,133 @@ function convert() {
   const beforeYear = input.substring(0, yearIndex).trim();
   let afterYear = input.substring(yearIndex + yearMatch[0].length).trim();
 
-  // 著者（1人だけの想定）
-  const author = beforeYear;
+  const parts = beforeYear
+    .replace(/,?\s+and\s+|&/gi, ",")
+    .split(",")
+    .map(p => p.trim())
+    .filter(p => p !== "");
 
-  // 本文処理
+  const authors = [];
+  for (let i = 0; i < parts.length - 1; i++) {
+    const current = parts[i];
+    const next = parts[i + 1];
+    if (/^([A-Z]\.|[A-Z][a-z]+)(\s+[A-Z]\.|[A-Z][a-z]+)*$/.test(next)) {
+      if (authors.length === 0) {
+        authors.push(`${current}, ${next}`);
+      } else {
+        authors.push(`${next} ${current}`);
+      }
+      i++;
+    }
+  }
+  if (authors.length === 0 && parts.length === 2) {
+    authors.push(`${parts[0]}, ${parts[1]}`);
+  }
+
+  let authorStr = "";
+  if (authors.length === 1) {
+    authorStr = authors[0];
+  } else if (authors.length === 2) {
+    authorStr = `${authors[0]} and ${authors[1]}`;
+  } else {
+    const last = authors.pop();
+    authorStr = `${authors.join(", ")} and ${last}`;
+  }
+
   let after = afterYear
-    .replace(/\((\d+)\):\s*([\d\-–]+)/, "$1: $2")  // ← これが重要
+    .replace(/^\.?\s*/, "")
+    .replace(/\((\d+)\):\s*([\d\-–]+)/, "$1: $2")
+    .replace(/,\s*(\d+)\(\d+\),\s*(e\d+)/i, " $1: $2")
+    .replace(/,\s*(\d+),\s*(\d+[-–]?\d*)/i, " $1: $2")
+    .replace(/\s+/g, " ")
     .trim();
 
   if (!after.endsWith(".")) {
     after += ".";
   }
 
-  const result = `${author} ${yearMatch[0]} ${after}`;
-  output.textContent = result;
+  const fullAPA = `${authorStr} ${yearMatch[0]} ${after}`;
+  output.textContent = fullAPA;
+  saveToHistory(input, fullAPA);
 }
-</script>
 
+function copyAPA() {
+  const input = document.getElementById("inputText");
+  const output = document.getElementById("apaOutput");
+  const text = output.textContent;
+  if (!text) return;
+  navigator.clipboard.writeText(text);
+  input.value = "";
+  output.textContent = "";
+}
+
+function clearInput() {
+  document.getElementById("inputText").value = "";
+  document.getElementById("apaOutput").textContent = "";
+}
+
+function saveToHistory(original, result) {
+  let history = JSON.parse(localStorage.getItem("apaHistory") || "[]");
+  history.unshift({ input: original, output: result });
+  if (history.length > 20) {
+    history = history.slice(0, 20);
+  }
+  localStorage.setItem("apaHistory", JSON.stringify(history));
+  renderHistory();
+}
+
+function deleteHistory(index) {
+  const history = JSON.parse(localStorage.getItem("apaHistory") || "[]");
+  history.splice(index, 1);
+  localStorage.setItem("apaHistory", JSON.stringify(history));
+  renderHistory();
+}
+
+function clearAllHistory() {
+  if (confirm("すべての履歴を削除しますか？")) {
+    localStorage.removeItem("apaHistory");
+    renderHistory();
+  }
+}
+
+function renderHistory() {
+  const history = JSON.parse(localStorage.getItem("apaHistory") || "[]");
+  const container = document.getElementById("historyList");
+  container.innerHTML = "";
+
+  history.forEach((item, index) => {
+    const entryDiv = document.createElement("div");
+    entryDiv.className = "history-entry";
+
+    const inputP = document.createElement("p");
+    inputP.innerHTML = `<strong>入力:</strong> ${item.input}`;
+
+    const outputP = document.createElement("p");
+    outputP.innerHTML = `<strong>出力:</strong> ${item.output}`;
+
+    const copyBtn = document.createElement("button");
+    copyBtn.textContent = "コピー";
+    copyBtn.className = "copy-btn";
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(item.output);
+    };
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "削除";
+    deleteBtn.className = "delete-btn";
+    deleteBtn.onclick = () => {
+      deleteHistory(index);
+    };
+
+    entryDiv.appendChild(inputP);
+    entryDiv.appendChild(outputP);
+    entryDiv.appendChild(copyBtn);
+    entryDiv.appendChild(deleteBtn);
+    container.appendChild(entryDiv);
+  });
+}
+
+renderHistory();
+</script>
 </body>
 </html>
